@@ -1,62 +1,41 @@
-^import re
-from collections import Counter
+import numpy as np
+
+def score(positions : list[int], a):
+    return sum([abs(x - a) for x in positions])
+
+def score_2(positions: list[int], a):
+
+    def score_x(x):
+        dx = abs(x - a)
+        sum = dx * (dx+1) / 2
+        return sum
+
+    return sum(score_x(x) for x in positions)
 
 
-def parse_line(line):
-    """
-    >>> parse_line("3,4,3,1,2")
-    {3: 2, 4: 1, 1: 1, 2: 1}
-    """
-    ret_val = Counter()
+def process_file(file_name, func, debug = False):
+    with open(file_name) as f:
+        values = [int(x) for x in f.readline().split(",")]
 
-    for x in line.split(','):
-        ret_val[int(x)] += 1
+    min = np.min(values)
+    max = np.max(values)
 
-    return dict(ret_val)
+    best = -1
+    best_score = 100000000000
 
+    for i in range(min, max+1):
+        xx = func(values, i)
 
-def evolve(population: dict):
-    """
-    >>> evolve(parse_line("2,3,2,0,1"))
-    {1: 2, 2: 1, 0: 1, 8: 1, 6: 1}
-    """
+        if debug:
+            print(f"{i}: {xx}")
 
-    num_reset = 0
-    new_vals = 0
-    ret_val = dict()
-    for (k, v) in population.items():
-        next = k - 1
-        if next < 0:
-            new_vals += v
-            num_reset = v
-        else:
-            ret_val[next] = v
+        if xx < best_score:
+            best_score = xx
+            best = i
 
-    if new_vals > 0:
-        ret_val[8] = new_vals
-        if 6 not in ret_val:
-            ret_val[6] = 0
-        ret_val[6] += num_reset
+    print(f"Depth = {best}, Score = {best_score}")
 
-    return ret_val
-
-def process_file(file, days):
-    with open(file) as f:
-        population = parse_line(f.readline())
-    # print(f'Initial state: {population}')
-
-    for i in range(1, days+1):
-        population = evolve(population)
-        # print(f'After {i} days: {population}')
-
-    return sum(population.values())
-
-
-print(process_file("day_6_test.txt", 18))
-print(process_file("day_6_test.txt", 80))
-print(process_file("day_6_test.txt", 256))
-
-print(process_file("day_6_input.txt", 18))
-print(process_file("day_6_input.txt", 80))
-print(process_file("day_6_input.txt", 256))
-
+process_file("day_7_test.txt", score, False)
+process_file("day_7_test.txt", score_2, False)
+process_file("day_7_input.txt", score, False)
+process_file("day_7_input.txt", score_2, False)
