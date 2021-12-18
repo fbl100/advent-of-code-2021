@@ -150,6 +150,7 @@ class Buffer:
 
         if type_id == 4:
             literal = self.read_literal_int(5)
+            # print(f"literal: {literal}")
             return {
                 'version': version,
                 'typeid': type_id,
@@ -182,105 +183,88 @@ class Buffer:
                 }
 
 
-def get_int(binary_string, start_index, bits):
-    return int(bits2char(binary_string[start_index:start_index + bits]))
-
-
-def get_version(binary_string, packet_start_index):
-    '''
-    >>> get_version('110100101111111000101000',0)
-    6
-    '''
-    return get_int(binary_string, packet_start_index, 3)
-
-
-def get_typeid(binary_string, packet_start_index):
-    '''
-    >>> get_typeid('110100101111111000101000', 0)
-    4
-    '''
-    return get_int(binary_string, packet_start_index + 3, 3)
-
-
-def parse_literal_packet(version, typeid, binary_string, start_index):
-    # typeid of 4 is a literal packet
-    # read groups of 5
-
-    # 110100101111111000101000
-    # VVVTTTAAAAABBBBBCCCCC
-    last_index = 0
-    chunk_size = 5
-    data_start_index = start_index + 6
-    s = ""
-
-    bits_read = 6
-
-    def next_chunk():
-        start = data_start_index + last_index
-        end = start + chunk_size
-        # skip the first bit
-        return binary_string[start + 1:end]
-
-    while binary_string[data_start_index + last_index] != '0':
-        s = s + next_chunk()
-        bits_read += 5
-        last_index += chunk_size
-
-    s = s + next_chunk()
-    bits_read += 5
-
-    return {
-        'version': version,
-        'typeid': typeid,
-        'binary': s,
-        'decimal': binary2literal(s),
-        'bits': bits_read
-    }
-
-
-def parse_operator_packet(version, typeid, binary_string, start_index):
-    '''
-    >>> parse_operator_packet(1,6,'00111000000000000110111101000101001010010001001000000000', 0)
-    :param version:
-    :param typeid:
-    :param binary_string:
-    :return:
-    '''
-    #
-    # 012345678901234567890123456789
-    # 00111000000000000110111101000101001010010001001000000000
-    # VVVTTTILLLLLLLLLLLLLLLAAAAAAAAAAABBBBBBBBBBBBBBBB
-
-    current_index = start_index + 6
-    i = binary_string[current_index]
-
-    current_index += 1
-    if i == '0':
-        # next 15 bits are a number that represents the total length in bits
-        # of the subpackets
-        total_length = binary2literal(binary_string[current_index:current_index + 15])
-        current_index += 15
-        subpackets = binary_string[current_index, current_index + total_length]
-
+def version_sum(packet):
+    if 'value' in packet:
+        return packet['version']
     else:
-        # next 11 bits are the number of subpackets
-        num_subpackets = binary2literal(binary_string[next:next + 11])
+        x = packet['version']
+        for sp in packet['packets']:
+            x += version_sum(sp)
+        return x
 
 
-def parse_packet(binary_string, start_index):
+def evaluate_packet(packet):
     '''
-    >>> parse_packet('110100101111111000101000',0)
-    {'version': 6, 'typeid': 4, 'binary': '011111100101', 'decimal': 2021}
-    >>> parse_packet('00111000000000000110111101000101001010010001001000000000',0)
+    >>> evaluate_packet(Buffer('C200B40A82').next_packet())
+    3
+    >>> evaluate_packet(Buffer('04005AC33890').next_packet())
+    54
+    >>> evaluate_packet(Buffer('880086C3E88112').next_packet())
+    7
+    >>> evaluate_packet(Buffer('CE00C43D881120').next_packet())
+    9
+    >>> evaluate_packet(Buffer('D8005AC2A8F0').next_packet())
+    1
+    >>> evaluate_packet(Buffer('F600BC2D8F').next_packet())
+    0
+    >>> evaluate_packet(Buffer('9C005AC2F8F0').next_packet())
+    0
+    >>> evaluate_packet(Buffer('9C0141080250320F1802104A08').next_packet())
+    1
     '''
-    v = get_version(binary_string, start_index)
-    t = get_typeid(binary_string, start_index)
-    if t == 4:
-        return parse_literal_packet(v, t, binary_string, start_index)
-    else:
-        return parse_operator_packet(v, t, binary_string, start_index)
+    ret_val = None
+    if packet['typeid'] == 0:
+        # sum packet
+        values = [evaluate_packet(p) for p in packet['packets']]
+        ret_val = sum(values)
+    elif packet['typeid'] == 1:
+        # product  packet, note that you need to use np.ulonglong to prevent
+        # integer overflow
+        ret_val = np.prod([evaluate_packet(p) for p in packet['packets']], dtype=np.ulonglong)
+    elif packet['typeid'] == 2:
+        ret_val = np.min([evaluate_packet(p) for p in packet['packets']])
+    elif packet['typeid'] == 3:
+        ret_val = np.max([evaluate_packet(p) for p in packet['packets']])
+    elif packet['typeid'] == 4:
+        ret_val = packet['value']
+    elif packet['typeid'] == 5:
+        ret_val = evaluate_packet(packet['packets'][0]) > evaluate_packet(packet['packets'][1])
+    elif packet['typeid'] == 6:
+        ret_val = evaluate_packet(packet['packets'][0]) < evaluate_packet(packet['packets'][1])
+    elif packet['typeid'] == 7:
+        ret_val =evaluate_packet(packet['packets'][0]) == evaluate_packet(packet['packets'][1])
+
+    if ret_val < 0:
+        raise "possible multiplication overflow"
+
+    return ret_val
 
 
-def parse(hex_string):
-    b = Buffer(hex_string)
-    p = next_packet(b)
+
+def part_1(hex_str):
+    '''
+    >>> part_1('8A004A801A8002F478')
+    16
+    >>> part_1('620080001611562C8802118E34')
+    12
+    >>> part_1('C0015000016115A2E0802F182340')
+    23
+    >>> part_1('A0016C880162017C3686B18A3D4780')
+    31
+    '''
+    b = Buffer(hex_str)
+    p = b.next_packet()
+    x = version_sum(p)
+    return x
+
+
+def process_file(filename):
+    with open(filename) as f:
+        txt = f.readlines()
+
+    sum = part_1(txt[0])
+    print(f"version sum of {filename} = {sum}")
+    value = evaluate_packet(Buffer(txt[0]).next_packet())
+    print(f"value of {filename} = {value}")
+
+process_file('day_16_input.txt')
