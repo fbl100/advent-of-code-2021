@@ -241,15 +241,15 @@ def evaluate_packet(packet):
 
 
 
-def part_1(hex_str):
+def sum_versions(hex_str):
     '''
-    >>> part_1('8A004A801A8002F478')
+    >>> sum_versions('8A004A801A8002F478')
     16
-    >>> part_1('620080001611562C8802118E34')
+    >>> sum_versions('620080001611562C8802118E34')
     12
-    >>> part_1('C0015000016115A2E0802F182340')
+    >>> sum_versions('C0015000016115A2E0802F182340')
     23
-    >>> part_1('A0016C880162017C3686B18A3D4780')
+    >>> sum_versions('A0016C880162017C3686B18A3D4780')
     31
     '''
     b = Buffer(hex_str)
@@ -262,7 +262,7 @@ def process_file(filename):
     with open(filename) as f:
         txt = f.readlines()
 
-    sum = part_1(txt[0])
+    sum = sum_versions(txt[0])
     print(f"version sum of {filename} = {sum}")
     value = evaluate_packet(Buffer(txt[0]).next_packet())
     print(f"value of {filename} = {value}")
